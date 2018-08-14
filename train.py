@@ -2,8 +2,8 @@ import csv
 import re
 from collections import defaultdict, Counter
 import functools
-import pickle
 from pathlib import Path
+import vecto.embeddings
 
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -19,7 +19,7 @@ from nltk import word_tokenize, TweetTokenizer
 import numpy as np
 import torch
 import torch.nn.functional as F
-from skorch.net import NeuralNetClassifier
+from skorch import NeuralNetClassifier
 
 from tqdm import tqdm
 
@@ -27,8 +27,8 @@ from tqdm import tqdm
 DATA_DIR = Path('./')
 
 # Path to a pickled dictionary of word embeddings: keys - tokens, values - np arrays (300,)
-WORD_VECTORS_FILENAME = Path('fasttext.min_count_100.vk_posts_all_443550246'
-                             '.300d.pickle')
+
+WORD_VECTORS_FILENAME = '/home/mattd/projects/tmp/sentiment/fasttext/'
 
 
 class SmallDeepNet(torch.nn.Module):
@@ -56,18 +56,14 @@ class SmallDeepNet(torch.nn.Module):
         return outputs
 
 
-def load_pickle(filename):
+def load_embeddings(filename):
     try:
-        with open(str(filename), 'rb') as f:
-            obj = pickle.load(f)
-
-        print(f'Loaded: {filename}')
+        embeddings = vecto.embeddings.load_from_dir(filename)
 
     except EOFError:
         print(f'Cannot load: {filename}')
-        obj = None
-
-    return obj
+        embeddings = None
+    return embeddings
 
 
 def load_data(filename):
@@ -93,15 +89,15 @@ def load_data(filename):
 
 
 def create_data_matrix_embeddings(samples, word_embeddings):
-    embeddings_dim = len(word_embeddings[list(word_embeddings.keys())[0]])
-
+    embeddings_dim = len(word_embeddings.matrix[0])
     nb_samples = len(samples)
     X = np.zeros((nb_samples, embeddings_dim), dtype=np.float32)
 
     nb_empty = 0
     for i, sample in enumerate(samples):
         tokens = sample.split(' ')
-        tokens_embeddings = [word_embeddings[t] for t in tokens if t in word_embeddings]
+        tokens_embeddings = [word_embeddings.get_vector(t) for t in tokens if
+                             word_embeddings.has_word(t)]
         if len(tokens_embeddings) > 0:
             mean_embeddings = np.mean(tokens_embeddings, axis=0)
             X[i] = mean_embeddings
@@ -168,7 +164,8 @@ def create_training_data(mode, labels_mode):
         labels_train = labels_base_train[:nb_samples_debug]
     elif mode == 'sample':
         nb_sample = len(samples_posneg_train)
-        samples_base_train, labels_base_train = shuffle(samples_base_train, labels_base_train)
+        samples_base_train, labels_base_train = shuffle(
+            samples_base_train, labels_base_train)
         samples_train = samples_base_train[:nb_sample]
         labels_train = labels_base_train[:nb_sample]
     elif mode == 'sample_posneg':
@@ -177,8 +174,9 @@ def create_training_data(mode, labels_mode):
         samples_train = []
         labels_train = []
         for target_class, target_counts in nb_samples_by_classes.most_common():
-            base_samples_of_target_class = [s for s, l in zip(samples_base_train, labels_base_train) if
-                                            l == target_class]
+            base_samples_of_target_class = [
+                s for s, l in zip(samples_base_train, labels_base_train)
+                if l == target_class]
             shuffle(base_samples_of_target_class)
             base_samples_of_target_class = base_samples_of_target_class[:target_counts]
 
@@ -225,14 +223,15 @@ def main():
     print(f'Data train: {len(samples_train)}')
     print(f'Labels train: {Counter(labels_train)}')
 
-    word_embeddings = load_pickle(WORD_VECTORS_FILENAME)
-    print(f'Word embeddings: {len(word_embeddings)}')
+    #word_embeddings = load_pickle(WORD_VECTORS_FILENAME)
+    embeddings = load_embeddings(WORD_VECTORS_FILENAME)
+    print(f'Word embeddings: {len(embeddings.vocabulary.lst_words)}')
 
     label_encoder = LabelEncoder()
     label_encoder.fit(labels_train)
     print(f'Labels: {label_encoder.classes_}')
 
-    X_train = create_data_matrix_embeddings(samples_train, word_embeddings)
+    X_train = create_data_matrix_embeddings(samples_train, embeddings)
     y_train = label_encoder.transform(labels_train)
     print(f'Train data: {X_train.shape}, {y_train.shape}')
 
