@@ -39,6 +39,9 @@ class SmallDeepNet(torch.nn.Module):
         self.nb_classes = nb_classes
         self.embedding_dim = embedding_dim
 
+        self.criterion = nn.CrossEntropyLoss()
+        self.optimizer = torch.optim.SGD(self.parameters(), lr=0.01,
+                                         momentum=0.9)
         self.classifier = torch.nn.Sequential(
             torch.nn.Linear(self.embedding_dim, self.hidden_size),
             torch.nn.ELU(),
@@ -55,6 +58,18 @@ class SmallDeepNet(torch.nn.Module):
 
         return outputs
 
+    def backward(self, y_pred, target):
+        loss = self.criterion(y_pred, target)
+
+        # Zero the gradients
+        self.optimizer.zero_grad()
+
+        # perform a backward pass (backpropagation)
+        loss.backward()
+
+        # Update the parameters
+        self.optimizer.step()
+        return loss
 
 def load_embeddings(filename):
     try:
@@ -122,9 +137,11 @@ def create_training_data(mode, labels_mode):
     samples_test, labels_test = load_data(data_test_filename)
 
     print(f'Data base: {len(samples_base_train)}, {len(labels_base_train)}')
-    print(f'Data posneg: {len(samples_posneg_train)}, {len(labels_posneg_train)}')
+    print(f'Data posneg: {len(samples_posneg_train)},'
+          f' {len(labels_posneg_train)}')
     print(f'Data test: {len(samples_test)}, {len(labels_test)}')
-    print(f'Labels: {len(set(labels_base_train))}, {len(set(labels_base_train))}, {len(set(labels_test))}')
+    print(f'Labels: {len(set(labels_base_train))},'
+          f' {len(set(labels_base_train))}, {len(set(labels_test))}')
 
     if mode == 'base':
         samples_train = samples_base_train
@@ -134,19 +151,25 @@ def create_training_data(mode, labels_mode):
         labels_train = labels_base_train + labels_posneg_train
     elif mode == 'pos':
         target_class = 'positive'
-        target_samples = [s for s, l in zip(samples_posneg_train, labels_posneg_train) if l == target_class]
+        target_samples = \
+            [s for s, l in zip(samples_posneg_train, labels_posneg_train)
+             if l == target_class]
         target_labels = [target_class] * len(target_samples)
         samples_train = samples_base_train + target_samples
         labels_train = labels_base_train + target_labels
     elif mode == 'neg':
         target_class = 'negative'
-        target_samples = [s for s, l in zip(samples_posneg_train, labels_posneg_train) if l == target_class]
+        target_samples = \
+            [s for s, l in zip(samples_posneg_train, labels_posneg_train)
+             if l == target_class]
         target_labels = [target_class] * len(target_samples)
         samples_train = samples_base_train + target_samples
         labels_train = labels_base_train + target_labels
     elif mode == 'neutral':
         target_class = 'neutral'
-        target_samples = [s for s, l in zip(samples_posneg_train, labels_posneg_train) if l == target_class]
+        target_samples = \
+            [s for s, l in zip(samples_posneg_train, labels_posneg_train)
+             if l == target_class]
         target_labels = [target_class] * len(target_samples)
         samples_train = samples_base_train + target_samples
         labels_train = labels_base_train + target_labels
@@ -155,7 +178,8 @@ def create_training_data(mode, labels_mode):
         labels_train = labels_posneg_train
     elif mode == 'replace':
         nb_replace = len(samples_posneg_train)
-        samples_base_train, labels_base_train = shuffle(samples_base_train, labels_base_train)
+        samples_base_train, labels_base_train = \
+            shuffle(samples_base_train, labels_base_train)
         samples_train = samples_base_train[:-nb_replace] + samples_posneg_train
         labels_train = labels_base_train[:-nb_replace] + labels_posneg_train
     elif mode == 'debug':
@@ -178,7 +202,8 @@ def create_training_data(mode, labels_mode):
                 s for s, l in zip(samples_base_train, labels_base_train)
                 if l == target_class]
             shuffle(base_samples_of_target_class)
-            base_samples_of_target_class = base_samples_of_target_class[:target_counts]
+            base_samples_of_target_class = \
+                base_samples_of_target_class[:target_counts]
 
             samples_train.extend(base_samples_of_target_class)
             labels_train.extend([target_class] * len(base_samples_of_target_class))
@@ -240,35 +265,38 @@ def main():
 
     X_train = scaler.transform(X_train)
 
-    net = NeuralNetClassifier(
-        SmallDeepNet(
-            embedding_dim=X_train.shape[1],
-            hidden_size=100,
-            nb_classes=int(max(y_train)) + 1
-        ),
-        max_epochs=50,
-        lr=0.01,
-        device='cuda',
-        verbose=1,
-    )
-
-    models = [
-        LogisticRegression(),
-        # LinearSVC(),
-        # GradientBoostingClassifier(),
-        net,
-    ]
-    results = []
-    for model in models:
-        model.fit(X_train, y_train)  # , sample_weight=sample_weight
-
-        result = score_model(model, X_train, y_train, label_encoder.classes_)
-        results.append(result)
-
-    print('===== RESULTS =====')
-    for model, (accuracy_train, f1_train, precision_train, recall_train) in zip(models, results):
-        model_name = model.__class__.__name__
-        print(f'{model_name}: F1 train {f1_train:.3f}')
+    classifier = SmallDeepNet(len(X_train[0,:]), 100, 5)
+    epoch = 50
+    for i in epoch:
+    # net = NeuralNetClassifier(
+    #     SmallDeepNet(
+    #         embedding_dim=X_train.shape[1],
+    #         hidden_size=100,
+    #         nb_classes=int(max(y_train)) + 1
+    #     ),
+    #     max_epochs=50,
+    #     lr=0.01,
+    #     device='cuda',
+    #     verbose=1,
+    # )
+    #
+    # models = [
+    #     LogisticRegression(),
+    #     # LinearSVC(),
+    #     # GradientBoostingClassifier(),
+    #     net,
+    # ]
+    # results = []
+    # for model in models:
+    #     model.fit(X_train, y_train)  # , sample_weight=sample_weight
+    #
+    #     result = score_model(model, X_train, y_train, label_encoder.classes_)
+    #     results.append(result)
+    #
+    # print('===== RESULTS =====')
+    # for model, (accuracy_train, f1_train, precision_train, recall_train) in zip(models, results):
+    #     model_name = model.__class__.__name__
+    #     print(f'{model_name}: F1 train {f1_train:.3f}')
 
 
 if __name__ == '__main__':
