@@ -1,0 +1,11 @@
+nltk==3.3
+numpy==1.14.5
+pkg-resources==0.0.0
+scikit-learn==0.19.1
+scipy==1.1.0
+six==1.11.0
+skorch==0.2.0
+tabulate==0.8.2
+torch==0.4.0
+tqdm==4.23.4
+vecto==0.1.6
